@@ -33,9 +33,15 @@ def onAppStart(app):
     app.stepsPerSecond = 30
     app.timer = 0
 
+    app.mousePos = (0, 0)
+    app.placingTower = True # Always showing a preview for now
+
 # ==========================================
 # CONTROLS
 # ==========================================
+
+def onMouseMove(app, mouseX, mouseY):
+    app.mousePos = (mouseX, mouseY)
 
 def onMousePress(app, mouseX, mouseY):
     # Ignore clicks if the game is over
@@ -68,18 +74,24 @@ def onStep(app):
     
     app.timer += 1
     
+    spawnRate = max(10, 30 - (app.wave * 2))
     # --- 1. Spawning Bloons ---
     # Spawn a new bloon every second (30 frames)
-    if app.timer % 30 == 0:
+    if app.timer % spawnRate == 0:
         startX, startY = app.path[0]
+        # Alternate between Red and Blue bloons
+        isBlue = (app.timer % 60 == 0) 
         newBloon = {
             'x': startX, 
             'y': startY, 
-            'targetNode': 1, # Index of the next checkpoint in app.path
-            'speed': 3,
-            'health': 1
+            'targetNode': 1,
+            'speed': 5 if isBlue else 3, # Blue is faster
+            'health': 2 if isBlue else 1, # Blue takes two hits
+            'color': 'blue' if isBlue else 'red'
         }
         app.bloons.append(newBloon)
+    if app.timer % 300 == 0:
+        app.wave += 1
 
     # --- 2. Moving Bloons ---
     # Iterate backwards so we can safely remove elements from the list
@@ -185,6 +197,9 @@ def redrawAll(app):
     for i in range(len(app.path) - 1):
         x1, y1 = app.path[i]
         x2, y2 = app.path[i+1]
+        # Draw the border first
+        drawLine(x1, y1, x2, y2, fill='sienna', lineWidth=44) 
+        # Then draw the main path
         drawLine(x1, y1, x2, y2, fill='tan', lineWidth=40)
         
     # 3. Draw Towers
@@ -198,7 +213,12 @@ def redrawAll(app):
         
     # 4. Draw Bloons
     for bloon in app.bloons:
-        drawOval(bloon['x'], bloon['y'], 20, 26, fill='red')
+        drawOval(bloon['x'], bloon['y'], 20, 26, fill=bloon['color'])
+
+    # Draw preview tower at mouse position
+    mx, my = app.mousePos
+    drawCircle(mx, my, 80, fill=None, border='white', opacity=50) # Range preview
+    drawCircle(mx, my, 15, fill='saddleBrown', opacity=50)        # Body preview
         
     # 5. Draw Projectiles
     for proj in app.projectiles:

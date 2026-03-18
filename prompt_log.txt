@@ -1,0 +1,5 @@
+Model: Gemini Pro
+
+1. Try not to change much from the existing code. Help me add features to this project.
+2. The path border is a bit buggy in some places. also the blue bloon should become red after being hit once. also you shouldnt be allowed to place towers in places where towers already exist or on the path
+3. 
