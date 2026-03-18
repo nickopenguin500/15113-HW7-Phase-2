@@ -2,4 +2,8 @@ Model: Gemini Pro
 
 1. Try not to change much from the existing code. Help me add features to this project.
 2. The path border is a bit buggy in some places. also the blue bloon should become red after being hit once. also you shouldnt be allowed to place towers in places where towers already exist or on the path
-3. 
+3. popping the blue bloon should give money when the first layer is popped AND when the second layer is popped. implement it in a way that makes future colors also easy to implement
+4. wait i do want to add green/yellow. can you redo all of these with those colors
+5. can you make these bloons take the accurate number of lives
+6. yes add a restart button. also, the right side of the screen looks cut off, could you fix that
+7. 

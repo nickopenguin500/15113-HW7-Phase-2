@@ -26,8 +26,8 @@ def onAppStart(app):
     app.projectiles = []
     
     # --- Pathing ---
-    # The coordinate checkpoints the bloons will travel between
-    app.path = [(0, 100), (200, 100), (200, 300), (400, 300), (400, 200), (400, -50)]
+    # Shifted the 400s to 340s so the thick path fits entirely on screen
+    app.path = [(0, 100), (200, 100), (200, 300), (340, 300), (340, -50)]
     
     # --- Timing ---
     app.stepsPerSecond = 30
@@ -35,6 +35,16 @@ def onAppStart(app):
 
     app.mousePos = (0, 0)
     app.placingTower = True # Always showing a preview for now
+
+    # --- Bloon Blueprints ---
+    # The key (1, 2, 3) is the tier/health level. 
+    app.bloonTypes = {
+        1: {'color': 'red', 'speed': 3, 'reward': 20},
+        2: {'color': 'blue', 'speed': 5, 'reward': 20},
+        # You can easily add more later just by uncommenting/adding lines!
+        3: {'color': 'green', 'speed': 7, 'reward': 20},
+        4: {'color': 'yellow', 'speed': 9, 'reward': 20}
+    }
 
 # ==========================================
 # CONTROLS
@@ -44,15 +54,22 @@ def onMouseMove(app, mouseX, mouseY):
     app.mousePos = (mouseX, mouseY)
 
 def onMousePress(app, mouseX, mouseY):
-    # Ignore clicks if the game is over
-    if app.gameOver: return
+    # --- Restart Button Logic ---
+    if app.gameOver:
+        # Check if the click was inside the button's boundaries
+        # x between 140 and 260 (center 200 +/- 60)
+        # y between 230 and 270 (center 200 + 30, height 40)
+        if (app.width/2 - 60 <= mouseX <= app.width/2 + 60 and 
+            app.height/2 + 30 <= mouseY <= app.height/2 + 70):
+            onAppStart(app) # Instantly resets the entire game!
+        return # Stop checking for tower placements if game is over
     
-    # Tower stats
+    # --- Tower Placement Logic ---
     towerCost = 200
     towerRange = 80
     
-    # Place a tower if the player has enough money
-    if app.money >= towerCost:
+    # Check if they have money AND the placement is valid
+    if app.money >= towerCost and isValidPlacement(app, mouseX, mouseY):
         newTower = {
             'x': mouseX, 
             'y': mouseY, 
@@ -61,12 +78,39 @@ def onMousePress(app, mouseX, mouseY):
         }
         app.towers.append(newTower)
         app.money -= towerCost
-    else:
+    elif app.money < towerCost:
         print("Not enough money!")
+    else:
+        print("Invalid placement!")
 
 # ==========================================
 # CORE GAME LOGIC
 # ==========================================
+
+def isValidPlacement(app, mouseX, mouseY):
+    towerRadius = 15
+    pathRadius = 22 # Half of the 44 lineWidth
+    
+    # 1. Check tower overlap
+    for tower in app.towers:
+        # Multiply by 2 because we need the distance between two centers
+        if distance(mouseX, mouseY, tower['x'], tower['y']) < (towerRadius * 2):
+            return False
+            
+    # 2. Check path overlap
+    for i in range(len(app.path) - 1):
+        x1, y1 = app.path[i]
+        x2, y2 = app.path[i+1]
+        
+        # Clamp the coordinates to find the closest point on the path segment
+        closestX = max(min(x1, x2), min(mouseX, max(x1, x2)))
+        closestY = max(min(y1, y2), min(mouseY, max(y1, y2)))
+        
+        # If the distance is less than the tower + path radii, it's overlapping
+        if distance(mouseX, mouseY, closestX, closestY) < (towerRadius + pathRadius):
+            return False
+            
+    return True
 
 def onStep(app):
     # Stop processing logic if the game is over
@@ -76,18 +120,23 @@ def onStep(app):
     
     spawnRate = max(10, 30 - (app.wave * 2))
     # --- 1. Spawning Bloons ---
-    # Spawn a new bloon every second (30 frames)
+    # Spawn a new bloon based on the spawnRate
     if app.timer % spawnRate == 0:
         startX, startY = app.path[0]
-        # Alternate between Red and Blue bloons
-        isBlue = (app.timer % 60 == 0) 
+        
+        # Determine the hardest bloon allowed for the current wave (Caps at 4 for Yellow)
+        highestTierAvailable = min(app.wave, 4)
+        
+        # Cycle through the available tiers so you get a mix of colors
+        startingTier = (app.timer // spawnRate) % highestTierAvailable + 1
+        
         newBloon = {
             'x': startX, 
             'y': startY, 
             'targetNode': 1,
-            'speed': 5 if isBlue else 3, # Blue is faster
-            'health': 2 if isBlue else 1, # Blue takes two hits
-            'color': 'blue' if isBlue else 'red'
+            'tier': startingTier, 
+            'speed': app.bloonTypes[startingTier]['speed'],
+            'color': app.bloonTypes[startingTier]['color']
         }
         app.bloons.append(newBloon)
     if app.timer % 300 == 0:
@@ -112,11 +161,15 @@ def onStep(app):
             
             # Check if it reached the final node (end of the track)
             if bloon['targetNode'] >= len(app.path):
-                app.lives -= 1
+                
+                # Deduct lives equal to the bloon's remaining layers (tier)
+                app.lives -= bloon['tier'] 
+                
                 app.bloons.pop(i) # Remove bloon
                 
-                # Trigger Game Over if lives hit 0
+                # Trigger Game Over if lives drop to 0 or below
                 if app.lives <= 0:
+                    app.lives = 0 # Prevents the UI from showing negative lives
                     app.gameOver = True
 
     # --- 3. Tower Firing Logic ---
@@ -171,12 +224,19 @@ def onStep(app):
             
             # 15 is the "hitbox" radius of the bloon
             if distance(proj['x'], proj['y'], bloon['x'], bloon['y']) < 15: 
-                bloon['health'] -= 1
+                
+                # 1. Give money for popping the CURRENT layer
+                app.money += app.bloonTypes[bloon['tier']]['reward']
+                
+                # 2. Downgrade the bloon's tier
+                bloon['tier'] -= 1
                 hitTarget = True
                 
-                # Handle popping the bloon
-                if bloon['health'] <= 0:
-                    app.money += 20
+                # 3. Update stats if it survived, otherwise remove it entirely
+                if bloon['tier'] > 0:
+                    bloon['color'] = app.bloonTypes[bloon['tier']]['color']
+                    bloon['speed'] = app.bloonTypes[bloon['tier']]['speed']
+                else:
                     app.bloons.pop(j)
                     
                 break # The projectile can only hit one bloon, so stop checking others
@@ -197,10 +257,16 @@ def redrawAll(app):
     for i in range(len(app.path) - 1):
         x1, y1 = app.path[i]
         x2, y2 = app.path[i+1]
-        # Draw the border first
+        
+        # Draw the line segments
         drawLine(x1, y1, x2, y2, fill='sienna', lineWidth=44) 
-        # Then draw the main path
         drawLine(x1, y1, x2, y2, fill='tan', lineWidth=40)
+        
+        # Draw circles at the nodes to round the corners
+        drawCircle(x1, y1, 22, fill='sienna')
+        drawCircle(x1, y1, 20, fill='tan')
+        drawCircle(x2, y2, 22, fill='sienna')
+        drawCircle(x2, y2, 20, fill='tan')
         
     # 3. Draw Towers
     for tower in app.towers:
@@ -233,7 +299,13 @@ def redrawAll(app):
     # 7. Draw Game Over Screen
     if app.gameOver:
         drawRect(0, 0, app.width, app.height, fill='black', opacity=70)
-        drawLabel('GAME OVER', app.width/2, app.height/2 - 20, size=40, fill='red', bold=True)
-        drawLabel('You let too many bloons past!', app.width/2, app.height/2 + 20, size=16, fill='white')
+        drawLabel('GAME OVER', app.width/2, app.height/2 - 40, size=40, fill='red', bold=True)
+        drawLabel('You let too many bloons past!', app.width/2, app.height/2, size=16, fill='white')
+        
+        # Draw the Restart Button
+        buttonX = app.width/2 - 60
+        buttonY = app.height/2 + 30
+        drawRect(buttonX, buttonY, 120, 40, fill='forestGreen', border='white')
+        drawLabel('Play Again', app.width/2, buttonY + 20, size=16, fill='white', bold=True)
 
 runApp(width=400, height=400)
