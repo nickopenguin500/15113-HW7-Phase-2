@@ -6,4 +6,3 @@ Model: Gemini Pro
 4. wait i do want to add green/yellow. can you redo all of these with those colors
 5. can you make these bloons take the accurate number of lives
 6. yes add a restart button. also, the right side of the screen looks cut off, could you fix that
-7. 
